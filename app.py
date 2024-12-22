@@ -12,10 +12,6 @@ from tensorflow.keras import backend as K  # Import Keras backend for custom met
 # Define a Flask app
 app = Flask(__name__)
 
-# Load the trained model
-image_shape = (224, 224)
-batch_size = 64
-
 # Load the model without compiling first
 model = tf.keras.models.load_model('cnn_model.keras', compile=False)
 
