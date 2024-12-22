@@ -3,6 +3,7 @@ $(document).ready(function () {
     $('.image-section').hide();
     $('.loader').hide();
     $('#result').hide();
+    $('#accuracy').hide();
     function readURL(input) {
         if (input.files && input.files[0]) {
             var reader = new FileReader();
@@ -37,11 +38,15 @@ $(document).ready(function () {
             processData: false,
             async: true,
             success: function (data) {
+                console.log(data);
                 // Get and display the result
                 $('.loader').hide();
                 $('#result').fadeIn(600);
-                $('#result').text(' Result:  ' + data);
-                console.log('Success!');
+                $('#result').text(' Result:  ' + data.prediction);
+                $('#accuracy').fadeIn(600);
+                $('#accuracy').text('Accuracy:  ' + data.accuracy);
+                $('#f1_score').fadeIn(600);
+                $('#f1_score').text('F1 Score:  ' + data.f1_score);
             },
         });
     });

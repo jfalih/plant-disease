@@ -1,79 +1,120 @@
 import os
 import tensorflow as tf
 import numpy as np
-from tensorflow import keras
-from skimage import io
 from tensorflow.keras.preprocessing import image
-
-
-# Flask utils
-from flask import Flask, redirect, url_for, request, render_template
+from flask import Flask, request, render_template, jsonify
 from werkzeug.utils import secure_filename
 from gevent.pywsgi import WSGIServer
+from keras.preprocessing.image import load_img, img_to_array
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras import backend as K  # Import Keras backend for custom metric
 
-# Define a flask app
+# Define a Flask app
 app = Flask(__name__)
 
-# Model saved with Keras model.save()
+# Load the trained model
+image_shape = (224, 224)
+batch_size = 64
+valid_dir = 'valid'
+train_dir = 'train'
 
-# You can also use pretrained model from Keras
-# Check https://keras.io/applications/
+# Load the model without compiling first
+model = tf.keras.models.load_model('cnn_model.keras', compile=False)
 
-model =tf.keras.models.load_model('PlantDNet.h5',compile=False)
-print('Model loaded. Check http://127.0.0.1:5000/')
+# Custom F1 score metric
+def f1_score(y_true, y_pred):
+    # Count positive samples
+    c1 = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))  # true positives
+    c2 = K.sum(K.round(K.clip(y_pred, 0, 1)))  # predicted positives
+    c3 = K.sum(K.round(K.clip(y_true, 0, 1)))  # true positives in the ground truth
 
+    # Avoid division by zero by checking if c3 is zero
+    c3_zero = K.equal(c3, 0)  # Check if c3 is zero
+
+    # If there are no true samples, return zero F1 score
+    precision = K.switch(c3_zero, K.zeros_like(c1), c1 / c2)
+    recall = K.switch(c3_zero, K.zeros_like(c1), c1 / c3)
+
+    # Calculate F1 score
+    f1 = 2 * (precision * recall) / (precision + recall + K.epsilon())  # K.epsilon() to avoid division by zero
+    return f1
+
+# Compile the model with the custom metric
+model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy', f1_score])
+
+# Data generators for training and testing
+train_datagen = ImageDataGenerator(rescale=1/255., validation_split=0.2)
+train_data = train_datagen.flow_from_directory(train_dir,
+                                               target_size=image_shape,
+                                               batch_size=batch_size,
+                                               class_mode='categorical',
+                                               shuffle=True,
+                                               subset='training')
+
+test_datagen = ImageDataGenerator(rescale=1/255.)
+test_data = test_datagen.flow_from_directory(valid_dir,
+                                               target_size=image_shape,
+                                               batch_size=batch_size,
+                                               class_mode='categorical',
+                                               shuffle=False)
+
+print('Model loaded and compiled. Check http://127.0.0.1:5000/')
+
+# List of possible disease classes
+disease_classes = [
+    "Apple___Apple_scab", "Apple___Black_rot", "Apple___Cedar_apple_rust", "Apple___healthy",
+    "Blueberry___healthy", "Cherry_(including_sour)___Powdery_mildew", "Cherry_(including_sour)___healthy",
+    "Corn_(maize)___Cercospora_leaf_spot Gray_leaf_spot", "Corn_(maize)___Common_rust_", "Corn_(maize)___Northern_Leaf_Blight", 
+    "Corn_(maize)___healthy", "Grape___Black_rot", "Grape___Esca_(Black_Measles)", "Grape___Leaf_blight_(Isariopsis_Leaf_Spot)",
+    "Grape___healthy", "Orange___Haunglongbing_(Citrus_greening)", "Peach___Bacterial_spot", "Peach___healthy", 
+    "Pepper,_bell___Bacterial_spot", "Pepper,_bell___healthy", "Potato___Early_blight", "Potato___Late_blight", 
+    "Potato___healthy", "Raspberry___healthy", "Soybean___healthy", "Squash___Powdery_mildew", "Strawberry___Leaf_scorch", 
+    "Strawberry___healthy", "Tomato___Bacterial_spot", "Tomato___Early_blight", "Tomato___Late_blight", "Tomato___Leaf_Mold", 
+    "Tomato___Septoria_leaf_spot", "Tomato___Spider_mites Two-spotted_spider_mite", "Tomato___Target_Spot", 
+    "Tomato___Tomato_Yellow_Leaf_Curl_Virus", "Tomato___Tomato_mosaic_virus", "Tomato___healthy"
+]
 
 def model_predict(img_path, model):
-    img = image.load_img(img_path, grayscale=False, target_size=(64, 64))
-    show_img = image.load_img(img_path, grayscale=False, target_size=(64, 64))
-    x = image.img_to_array(img)
-    x = np.expand_dims(x, axis=0)
-    x = np.array(x, 'float32')
-    x /= 255
-    preds = model.predict(x)
+    # Load and preprocess the image
+    img = image.load_img(img_path, target_size=(224, 224))  # Resize image to match model input size
+    x = image.img_to_array(img) / 255.0  # Convert to array and normalize
+    x = np.expand_dims(x, axis=0)  # Add batch dimension
+    preds = model.predict(x)  # Make prediction using the model
     return preds
-
 
 @app.route('/', methods=['GET'])
 def index():
     # Main page
     return render_template('index.html')
 
-
-@app.route('/predict', methods=['GET', 'POST'])
+@app.route('/predict', methods=['POST'])
 def upload():
     if request.method == 'POST':
         # Get the file from post request
         f = request.files['file']
 
-        # Save the file to ./uploads
+        # Save the file to ./uploads directory
         basepath = os.path.dirname(__file__)
-        file_path = os.path.join(
-            basepath, 'uploads', secure_filename(f.filename))
+        file_path = os.path.join(basepath, 'uploads', secure_filename(f.filename))
         f.save(file_path)
 
-        # Make prediction
+        # Make prediction for the uploaded image
         preds = model_predict(file_path, model)
-        print(preds[0])
 
-        # x = x.reshape([64, 64]);
-        disease_class = ['Pepper__bell___Bacterial_spot', 'Pepper__bell___healthy', 'Potato___Early_blight',
-                         'Potato___Late_blight', 'Potato___healthy', 'Tomato_Bacterial_spot', 'Tomato_Early_blight',
-                         'Tomato_Late_blight', 'Tomato_Leaf_Mold', 'Tomato_Septoria_leaf_spot',
-                         'Tomato_Spider_mites_Two_spotted_spider_mite', 'Tomato__Target_Spot',
-                         'Tomato__Tomato_YellowLeaf__Curl_Virus', 'Tomato__Tomato_mosaic_virus', 'Tomato_healthy']
-        a = preds[0]
-        ind=np.argmax(a)
-        print('Prediction:', disease_class[ind])
-        result=disease_class[ind]
-        return result
+        # Get the predicted class index
+        predicted_class = np.argmax(preds[0])  # Get the index of the highest predicted score
+
+        print('Predicted class:', preds)
+
+        return jsonify({
+            'prediction': disease_classes[predicted_class],  # Use the disease class name as the prediction
+            'accuracy': str(preds[0][predicted_class])  # Return the score of the predicted class
+        })
+
     return None
 
-
 if __name__ == '__main__':
-    # app.run(port=5002, debug=True)
-
-    # Serve the app with gevent
+    # Serve the app with gevent for better performance
     http_server = WSGIServer(('', 5000), app)
     http_server.serve_forever()
     app.run()

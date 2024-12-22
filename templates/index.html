@@ -8,22 +8,20 @@
          <input type="file" name="file" class="btn btn-success" id="imageUpload" accept=".png, .jpg, .jpeg">
     </form>
 
-
     <div class="image-section" style="display:none;">
          <img id="imagePreview"  class="img-responsive" src="#" style="width:300px;height:300px;"/><br><br>
          <div>
-            <button type="button" class="btn btn-info btn-lg " id="btn-predict">Predict!</button>
+            <button type="button" class="btn btn-primary btn-lg " id="btn-predict">Predict!</button>
          </div>
     </div>
 
-
-
     <div class="loader" style="display:none;"></div>
 
-    <h3 id="result">
-        <span> </span>
-    </h3>
+    <!-- Result Section -->
+    <div id="result" class="p-3 mb-2 bg-dark text-white">Result:</div>
 
+    <!-- Accuracy Section -->
+    <div id="accuracy" class="p-3 mb-2 bg-danger text-white">Accuracy:</div>
 
 </center><br><br>
 {% endblock %}
