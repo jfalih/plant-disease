@@ -15,8 +15,6 @@ app = Flask(__name__)
 # Load the trained model
 image_shape = (224, 224)
 batch_size = 64
-valid_dir = 'valid'
-train_dir = 'train'
 
 # Load the model without compiling first
 model = tf.keras.models.load_model('cnn_model.keras', compile=False)
@@ -41,22 +39,6 @@ def f1_score(y_true, y_pred):
 
 # Compile the model with the custom metric
 model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy', f1_score])
-
-# Data generators for training and testing
-train_datagen = ImageDataGenerator(rescale=1/255., validation_split=0.2)
-train_data = train_datagen.flow_from_directory(train_dir,
-                                               target_size=image_shape,
-                                               batch_size=batch_size,
-                                               class_mode='categorical',
-                                               shuffle=True,
-                                               subset='training')
-
-test_datagen = ImageDataGenerator(rescale=1/255.)
-test_data = test_datagen.flow_from_directory(valid_dir,
-                                               target_size=image_shape,
-                                               batch_size=batch_size,
-                                               class_mode='categorical',
-                                               shuffle=False)
 
 print('Model loaded and compiled. Check http://127.0.0.1:5000/')
 
